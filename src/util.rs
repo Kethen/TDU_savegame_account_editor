@@ -1,4 +1,4 @@
-pub fn hash_byte_string(to_be_hashed: &std::vec::Vec<u8>) -> [u8; 4]{
+fn hash_byte_string(to_be_hashed: &std::vec::Vec<u8>) -> [u8; 4]{
 	let mut pad:[u32; 0x100] = [0;0x100];
 	let mut uVar2:u32 = 0;
 	// tdu 1.66a exe at 0x00622f50
@@ -155,4 +155,54 @@ pub fn patch_commondrt(commondt:&mut std::vec::Vec<u8>, player_identifier: &Play
 	}
 
 	return Ok(());	
+}
+
+pub fn patch_playersave(playersave:&mut std::vec::Vec<u8>, player_identifier:&PlayerIdentifier, online:bool) -> Result<(), &'static str>{
+	if playersave.len() < 0x13{
+		return Err("playersave is too small");
+	}
+
+	let nickname_bytes = player_identifier.nickname.clone().into_bytes();
+	let email_bytes = player_identifier.email.clone().into_bytes();
+	let password_bytes = player_identifier.password.clone().into_bytes();
+
+	if nickname_bytes.len() > 30{
+		return Err("nickname is longer than 30 bytes");
+	}
+
+	let mut i:usize = 0;
+	for byte in hash_byte_string(&nickname_bytes){
+		playersave[i + 0x8] = byte;
+		i = i + 1;
+	}
+
+	if online{
+		i = 0;
+		for byte in hash_byte_string(&email_bytes){
+			playersave[i + 0xc] = byte;
+			i = i + 1;
+		}
+
+		i = 0;
+		for byte in hash_byte_string(&password_bytes){
+			playersave[i + 0x10] = byte;
+			i = i + 1;
+		}
+	}else{
+		for i in 0xc..0x14{
+			playersave[i] = 0;
+		}
+	}
+
+	for i in 0x1a..0x3a{
+		playersave[i] = 0;
+	}
+
+	let mut i:usize = 0;
+	for byte in nickname_bytes{
+		playersave[i + 0x1a] = byte;
+		i = i + 1;
+	}
+
+	return Ok(());
 }

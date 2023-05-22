@@ -2,26 +2,50 @@ mod util;
 mod tdudec;
 
 fn main() {
-	test_hash("Katie");
 	test_commondt_read();
 	test_commondt_write();
+	test_playersave_write();
 }
 
 fn test_commondt_write(){
 	let commondt = std::fs::read("commondt.sav").unwrap();
 	let mut commondt_decrypted = tdudec::decrypt_save(&commondt);
 	let player_identifier = util::PlayerIdentifier{
-		nickname: String::from("Katie2"),
+		nickname: String::from("Katie3"),
 		email: String::from("katie@katie.inc"),
-		password: String::from("hahahaha1234"),
+		password: String::from("12345678"),
 	};
 	util::patch_commondrt(&mut commondt_decrypted, &player_identifier, true).unwrap();
 	let commondt_modified_encrypted = tdudec::encrypt_save(&commondt_decrypted);
 	std::fs::write("commondt.sav.modified", &commondt_modified_encrypted);
 
+	let commondt = std::fs::read("commondt.sav").unwrap();
+	let mut commondt_decrypted = tdudec::decrypt_save(&commondt);
+
 	util::patch_commondrt(&mut commondt_decrypted, &player_identifier, false).unwrap();
 	let commondt_modified_encrypted = tdudec::encrypt_save(&commondt_decrypted);
 	std::fs::write("commondt.sav.modified2", &commondt_modified_encrypted);
+}
+
+fn test_playersave_write(){
+	let playersave = std::fs::read("playersave").unwrap();
+	let mut playersave_decrypted = tdudec::decrypt_save(&playersave);
+	let player_identifier = util::PlayerIdentifier{
+		nickname: String::from("Katie3"),
+		email: String::from("katie@katie.inc"),
+		password: String::from("12345678"),
+	};
+
+	util::patch_playersave(&mut playersave_decrypted, &player_identifier, true).unwrap();
+	let playersave_modified_encrypted = tdudec::encrypt_save(&playersave_decrypted);
+	std::fs::write("playersave.modified", &playersave_modified_encrypted);
+
+	let playersave = std::fs::read("playersave").unwrap();
+	let mut playersave_decrypted = tdudec::decrypt_save(&playersave);
+
+	util::patch_playersave(&mut playersave_decrypted, &player_identifier, false).unwrap();
+	let playersave_modified_encrypted = tdudec::encrypt_save(&playersave_decrypted);
+	std::fs::write("playersave.modified2", &playersave_modified_encrypted);
 }
 
 fn test_commondt_read(){
@@ -31,18 +55,4 @@ fn test_commondt_read(){
 	print!("nickname: {}\n", login.nickname);
 	print!("email: {}\n", login.email);
 	print!("password: {}\n", login.password);
-}
-
-fn test_hash(in_string: &'static str) {
-	print!("hashing {}\n", in_string);
-	for byte in String::from(in_string).into_bytes(){
-		print!("{:x} ", byte);
-	}
-	print!("\n");
-	let test_string = String::from(in_string).into_bytes();
-    let hash = util::hash_byte_string(&test_string);
-    for byte in hash{
-    	print!("{:x} ", byte);
-    }
-    print!("\n");
 }

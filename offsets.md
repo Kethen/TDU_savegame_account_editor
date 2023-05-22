@@ -15,3 +15,4 @@
 - 0x10-0x13: hash of password
 	- see src/util.rs for hashing algorithm
 	- empty email/password digests are just 0:u32, used in offline saves
+- 0x1a-0x39: nickname

@@ -1,6 +1,7 @@
 ### notes
 - currently these offsets were found:
 	- save file offsets by inspecting diffs of online/offline decrypted save files against project paradise
+		- tdudec (http://aluigi.altervista.org/papers.htm#others-file) was used for savefile decryption, huge thanks to Luigi Auriemma for reversing the encryption and releasing an open source implementation
 	- in-memory offsets using ghidra and x64dbg
 
 ### commondt.sav

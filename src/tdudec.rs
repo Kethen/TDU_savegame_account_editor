@@ -1,4 +1,26 @@
 // re-written from http://aluigi.altervista.org/papers.htm#others-file Test Drive Unlimited savegames/files decrypter/encrypter 0.1 c source
+// Copyright 2023 Katharine Chui
+
+// original license of tdudec.c:
+/*
+    Copyright 2009 Luigi Auriemma
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
+
+    http://www.gnu.org/licenses/gpl-2.0.txt
+*/
 
 // endianess
 // "\x2C\x43\xEA\x64\x24\x5B\xA3\xF8\x81\xCD\x8E\x01\xAC\xBE\x26\x83"

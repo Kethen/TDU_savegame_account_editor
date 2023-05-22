@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "tdu_savegame_online_toggle"
+name = "tdu_savegame_account_changer"
 version = "0.1.0"

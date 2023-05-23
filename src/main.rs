@@ -3,7 +3,7 @@ mod tdudec;
 
 use rfd::FileDialog;
 
-use iced::{Sandbox, Element, Alignment, Settings};
+use iced::{Sandbox, Element, Alignment, Settings, Color};
 use iced::widget::{button, container, checkbox, pick_list, scrollable, text, text_input, column, row};
 
 const config_file:&str = "tdu_savegame_account_editor.conf";
@@ -75,6 +75,12 @@ fn guess_path() -> String {
 	return String::from("");
 }
 
+enum StateColor {
+	Default,
+	Green,
+	Red,
+}
+
 struct AccountChanger {
 	path:String,
 	selected_profile:String,
@@ -84,11 +90,12 @@ struct AccountChanger {
 	password:String,
 	profile_list:std::vec::Vec<String>,
 
-	playersave_import_path:String,
+	import_playersave_path:String,
 	online:bool,
 	import_playersave:bool,
 
 	state:String,
+	state_color:StateColor,
 	commondt_cache:std::vec::Vec<u8>,
 	playersave_cache:std::vec::Vec<u8>,
 }
@@ -99,10 +106,13 @@ enum Message{
 	IgnoreToggle(bool),
 	SelectPath,
 	SelectProfile(String),
-	ChangeNickName(String),
+	ChangeNickname(String),
 	ChangeEmail(String),
 	ChangePassword(String),
 	ToggleOnline(bool),
+	ToggleImport(bool),
+	SelectImportPath,
+	Apply,
 }
 
 fn fetch_and_filter_profile_list(path:&String) -> std::vec::Vec<String>{
@@ -216,6 +226,106 @@ fn fetch_commondt_and_playersave(path:&String, profile_name:&String) -> Result<(
 	return Ok((commondt, playersave));
 }
 
+fn import_playersave(path:&String) -> Result<std::vec::Vec<u8>, String>{
+	match std::fs::read(path){
+		Ok(b) => Ok(tdudec::decrypt_save(&b)),
+		Err(e) => Err(format!("failed importing playersave from {}, {}", path, e)),
+	}
+}
+
+fn perform_patch(commondt:&std::vec::Vec<u8>,
+				playersave:&std::vec::Vec<u8>,
+				path:&String,
+				profile_name:&String,
+				profile_list:&std::vec::Vec<String>,
+				player_identifier:&util::PlayerIdentifier,
+				online:bool) -> Result<(), String>{
+	let mut commondt = commondt.clone();
+	match util::patch_commondt(&mut commondt, player_identifier, online){
+		Ok(_) => {},
+		Err(e) => {
+			return Err(format!("failed patching commondt, {}", e));
+		},
+	}
+	commondt = tdudec::encrypt_save(&commondt);
+
+	let mut playersave = playersave.clone();
+	let patch_playersave = playersave.len() != 0;
+	if patch_playersave{
+		match util::patch_playersave(&mut playersave, &player_identifier, online){
+			Ok(_) => {},
+			Err(e) => {
+				return Err(format!("failed patching playerdata, {}", e));
+			},
+		}
+		playersave = tdudec::encrypt_save(&playersave);
+	}
+
+	let base_dir = format!("{}", std::path::Path::new(&path).parent().unwrap().display());
+	let backup_dir = format!("{}.bak", base_dir);
+	if !std::path::Path::new(&base_dir).exists(){
+		return Err(format!("{} is missing", base_dir));
+	}
+
+	if !std::path::Path::new(&backup_dir).exists(){
+		let mut copy_option = fs_extra::dir::CopyOptions::new();
+		copy_option.copy_inside = true;
+		match fs_extra::dir::copy(&base_dir, &backup_dir, &copy_option){
+			Ok(_) => {},
+			Err(_) => {
+				return Err(format!("failed backing up {} to {}", base_dir, backup_dir));
+			},
+		}
+	}
+
+	let profile_path = format!("{}/{}", base_dir, profile_name);
+	match fs_extra::dir::remove(&profile_path){
+		Ok(_) => {},
+		Err(_) => {
+			return Err(format!("failed removing profile {}", profile_name));
+		}
+	}
+
+	let playersave_path = format!("{}/{}/{}", base_dir, player_identifier.nickname.trim_end_matches('\0'), "playersave");
+	match std::fs::DirBuilder::new().recursive(true).create(&playersave_path){
+		Ok(_) => {},
+		Err(e) => {
+			return Err(format!("failed creating directory {}, {}", playersave_path, e));
+		},
+	}
+
+	match std::fs::write(&format!("{}/{}", playersave_path, "commondt.sav"), &commondt){
+		Ok(_) => {},
+		Err(e) => {
+			return Err(format!("failed writing commondt.sav, {}", e));
+		},
+	}
+
+	if patch_playersave{
+		match std::fs::write(&format!("{}/{}", playersave_path, "playersave"), &playersave){
+			Ok(_) => {},
+			Err(e) => {
+				return Err(format!("failed writing playersave, {}", e));
+			},
+		}
+	}
+
+	let mut new_profile_list = vec![player_identifier.nickname.clone()];
+	for item in profile_list{
+		if !(item == profile_name){
+			new_profile_list.push(item.clone());
+		}
+	}
+
+	let new_profile_list = util::write_profile_list(&new_profile_list);
+	match std::fs::write(path, &new_profile_list){
+		Ok(_) => Ok(()),
+		Err(e) => {
+			Err(format!("failed writing ProfileList.dat, {}", e))
+		}
+	}
+}
+
 impl Sandbox for AccountChanger{
 	type Message = Message;
 
@@ -266,11 +376,12 @@ impl Sandbox for AccountChanger{
 			password:player_identifier.password.clone(),
 			profile_list:profile_list,
 
-			playersave_import_path:String::from(""),
+			import_playersave_path:String::from(""),
 			online:online,
 			import_playersave:false,
 
 			state:String::from(""),
+			state_color:StateColor::Default,
 			commondt_cache:commondt_cache,
 			playersave_cache:playersave_cache,
 		}
@@ -310,7 +421,7 @@ impl Sandbox for AccountChanger{
 							Ok((pi, online)) => {
 								self.nickname = pi.nickname.clone();
 								self.email = pi.email.clone();
-								self.password = pi.email.clone();
+								self.password = pi.password.clone();
 								self.selected_profile_valid = true;
 								self.commondt_cache = commondt;
 								self.online = online;
@@ -321,6 +432,7 @@ impl Sandbox for AccountChanger{
 								self.email = String::from("");
 								self.password = String::from("");
 								self.selected_profile_valid = false;
+								self.state_color = StateColor::Red;
 								self.state = String::from("failed parsing commondt");
 								log(&format!("failed parsing commondt during field population, {}", e));
 							}
@@ -331,23 +443,99 @@ impl Sandbox for AccountChanger{
 						self.email = String::from("");
 						self.password = String::from("");
 						self.selected_profile_valid = false;
+						self.state_color = StateColor::Red;
 						self.state = String::from("failed reading commondt");
 						log(&format!("failed reading commondt during field population, {}", e));
 					}
 				}
 
 			},
-			Message::ChangeNickName(s) => {
-				self.nickname = s;
+			Message::ChangeNickname(s) => {
+				self.nickname = s.clone();
+				if self.nickname.len() > 30{
+					self.nickname = self.nickname[0..30].to_string();
+				}
 			},
 			Message::ChangeEmail(s) => {
-				self.email = s;
+				self.email = s.clone();
+				if self.email.len() > 50{
+					self.email = self.email[0..50].to_string();
+				}
 			},
 			Message::ChangePassword(s) => {
-				self.password = s;
+				self.password = s.clone();
+				if self.password.len() > 30{
+					self.password = self.password[0..30].to_string();
+				}
 			},
 			Message::ToggleOnline(b) => {
 				self.online = b;
+			},
+			Message::ToggleImport(b) => {
+				self.import_playersave = b;
+			},
+			Message::SelectImportPath => {
+				match FileDialog::new()
+					.pick_file(){
+						Some(p) => {
+							self.import_playersave_path = format!("{}", p.display());
+						},
+						None => {
+							log(&format!("file dialog returned without a path"));
+						},
+				}
+			},
+			Message::Apply => {
+				if self.nickname.trim_end_matches('\0').to_string() != self.selected_profile{
+					for item in &self.profile_list{
+						if item == &self.nickname.trim_end_matches('\0').to_string(){
+							self.state = format!("Profile name {} is already in-use", item);
+							self.state_color = StateColor::Red;
+							return;
+						}
+					}
+				}
+
+				let player_identifier = util::PlayerIdentifier{
+					nickname:self.nickname.trim_end_matches('\0').to_string(),
+					email:self.email.trim_end_matches('\0').to_string(),
+					password:self.password.trim_end_matches('\0').to_string(),
+				};
+				if self.import_playersave {
+					match import_playersave(&self.import_playersave_path){
+						Ok(imported_save) => {
+							self.playersave_cache = imported_save;
+						},
+						Err(e) => {
+							self.state = e.clone();
+							self.state_color = StateColor::Red;
+							return;
+						}
+					}
+				}
+				match perform_patch(
+						&self.commondt_cache,
+						&self.playersave_cache,
+						&self.path,
+						&self.selected_profile,
+						&self.profile_list,
+						&player_identifier,
+						self.online){
+					Ok(_) => {
+						self.state = format!("successfully modified {} and updated ProfileList.dat", self.selected_profile);
+						self.state_color = StateColor::Green;
+						log(&format!("successfully modified {} and updated ProfileList.dat", self.selected_profile));
+					},
+					Err(e) => {
+						self.state = format!("failed applying changes, {}", e);
+						self.state_color = StateColor::Red;
+						log(&format!("failed applying changes, {}", e))
+					}
+				}
+				self.profile_list = fetch_and_filter_profile_list(&self.path);
+				if self.profile_list.len() != 0{
+					self.update(Message::SelectProfile(self.profile_list[0].clone()));
+				}
 			}
 		};
 	}
@@ -366,7 +554,7 @@ impl Sandbox for AccountChanger{
 			row![
 				text("Nickname:"),
 				if self.selected_profile_valid{
-					text_input("", &self.nickname).on_input(Message::ChangeNickName)
+					text_input("", &self.nickname).on_input(Message::ChangeNickname)
 				}else{
 					text_input("", "")
 				},
@@ -395,6 +583,53 @@ impl Sandbox for AccountChanger{
 					checkbox("", false, Message::IgnoreToggle)
 				},
 			].align_items(Alignment::Center),
+			row![
+				text("Import another playersave to this profile:"),
+				if self.selected_profile_valid{
+					checkbox("", self.import_playersave, Message::ToggleImport)
+				}else{
+					checkbox("", false, Message::IgnoreToggle)
+				},
+				if self.selected_profile_valid && self.import_playersave{
+					text_input("", &self.import_playersave_path).on_input(Message::IgnoreString)
+				}else{
+					text_input("", "")
+				},
+				if self.selected_profile_valid && self.import_playersave{
+					button("...").on_press(Message::SelectImportPath)
+				}else{
+					button("...")
+				}
+			].align_items(Alignment::Center),
+			row![
+				if self.selected_profile_valid &&
+						self.nickname.len() != 0 &&
+						((
+							self.online &&
+							self.email.len() != 0 &&
+							self.password.len() != 0
+						) ||
+							!self.online
+						){
+					button("Apply").on_press(Message::Apply)
+				}else{
+					button("Apply")
+				}						
+			].align_items(Alignment::Center),
+			row![
+				text("Last event: "),
+				match self.state_color{
+					StateColor::Default => {
+						text(&self.state)
+					},
+					StateColor::Green => {
+						text(&self.state).style(Color::from([0.0, 0.5, 0.0]))
+					},
+					StateColor::Red => {
+						text(&self.state).style(Color::from([0.5, 0.0, 0.0]))
+					},
+				}
+			].align_items(Alignment::Center),
 		]
 		.align_items(Alignment::Start)
 		.padding(10)
@@ -403,7 +638,10 @@ impl Sandbox for AccountChanger{
 }
 
 fn main() {
-	AccountChanger::run(Settings::default());
+	let mut settings = Settings::default();
+	settings.window.resizable = false;
+	settings.window.size = (700, 290);
+	AccountChanger::run(settings);
 }
 
 fn test() {
@@ -421,14 +659,14 @@ fn test_commondt_write(){
 		email: String::from("katie@katie.inc"),
 		password: String::from("12345678"),
 	};
-	util::patch_commondrt(&mut commondt_decrypted, &player_identifier, true).unwrap();
+	util::patch_commondt(&mut commondt_decrypted, &player_identifier, true).unwrap();
 	let commondt_modified_encrypted = tdudec::encrypt_save(&commondt_decrypted);
 	std::fs::write("commondt.sav.modified", &commondt_modified_encrypted);
 
 	let commondt = std::fs::read("commondt.sav").unwrap();
 	let mut commondt_decrypted = tdudec::decrypt_save(&commondt);
 
-	util::patch_commondrt(&mut commondt_decrypted, &player_identifier, false).unwrap();
+	util::patch_commondt(&mut commondt_decrypted, &player_identifier, false).unwrap();
 	let commondt_modified_encrypted = tdudec::encrypt_save(&commondt_decrypted);
 	std::fs::write("commondt.sav.modified2", &commondt_modified_encrypted);
 }

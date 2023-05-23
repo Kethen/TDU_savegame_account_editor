@@ -99,14 +99,28 @@ pub fn read_commondt(commondt:&std::vec::Vec<u8>) -> Result<(PlayerIdentifier, b
 	}, online));
 }
 
-pub fn patch_commondrt(commondt:&mut std::vec::Vec<u8>, player_identifier: &PlayerIdentifier, online:bool) -> Result<(), &'static str>{
+fn string_to_byte_string(in_string:&String) -> std::vec::Vec<u8>{
+	let in_byte_string = in_string.clone().into_bytes();
+	let mut ret = std::vec::Vec::<u8>::new();
+	let mut i:usize = 0;
+	while i < in_byte_string.len(){
+		if in_byte_string[i] == 0{
+			break;
+		}
+		ret.push(in_byte_string[i]);
+		i = i + 1;
+	}
+	return ret;
+}
+
+pub fn patch_commondt(commondt:&mut std::vec::Vec<u8>, player_identifier: &PlayerIdentifier, online:bool) -> Result<(), &'static str>{
 	if commondt.len() < 0x10f{
 		return Err("commondt is too small");
 	}
 
-	let nickname_bytes = player_identifier.nickname.clone().into_bytes();
-	let email_bytes = player_identifier.email.clone().into_bytes();
-	let password_bytes = player_identifier.password.clone().into_bytes();
+	let nickname_bytes = string_to_byte_string(&player_identifier.nickname);
+	let email_bytes = string_to_byte_string(&player_identifier.email);
+	let password_bytes = string_to_byte_string(&player_identifier.password);
 
 	if nickname_bytes.len() > 30{
 		return Err("nickname is longer than 30 bytes");
@@ -168,9 +182,9 @@ pub fn patch_playersave(playersave:&mut std::vec::Vec<u8>, player_identifier:&Pl
 		return Err("playersave is too small");
 	}
 
-	let nickname_bytes = player_identifier.nickname.clone().into_bytes();
-	let email_bytes = player_identifier.email.clone().into_bytes();
-	let password_bytes = player_identifier.password.clone().into_bytes();
+	let nickname_bytes = string_to_byte_string(&player_identifier.nickname);
+	let email_bytes = string_to_byte_string(&player_identifier.email);
+	let password_bytes = string_to_byte_string(&player_identifier.password);
 
 	if nickname_bytes.len() > 30{
 		return Err("nickname is longer than 30 bytes");
@@ -246,7 +260,7 @@ pub fn read_profile_list(profile_list:&std::vec::Vec<u8>) -> Result<std::vec::Ve
 pub fn write_profile_list(profile_list:&std::vec::Vec<String>) -> std::vec::Vec<u8>{
 	let mut ret:std::vec::Vec<u8> = std::vec::Vec::<u8>::new();
 	for (i, string) in profile_list.iter().enumerate(){
-		let bytes = string.clone().into_bytes();
+		let bytes = string_to_byte_string(&string);
 		let len = u16::try_from(bytes.len()).unwrap();
 		for byte in len.to_le_bytes(){
 			ret.push(byte);

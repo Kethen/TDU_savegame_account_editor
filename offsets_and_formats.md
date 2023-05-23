@@ -15,7 +15,7 @@
 - 0x8-0xb: hash of nickname
 - 0xc-0xf: hash of email
 - 0x10-0x13: hash of password
-	- see src/util.rs for hashing algorithm
+	- see https://github.com/Kethen/TDU_savegame_account_editor/blob/main/src/util.rs for hashing algorithm
 	- empty email/password digests are just 0:u32, used in offline saves
 - 0x1a-0x39: nickname
 

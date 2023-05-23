@@ -206,3 +206,43 @@ pub fn patch_playersave(playersave:&mut std::vec::Vec<u8>, player_identifier:&Pl
 
 	return Ok(());
 }
+
+pub fn read_profile_list(profile_list:&std::vec::Vec<u8>) -> Result<std::vec::Vec<String>, &'static str>{
+	if profile_list.len() < 3{
+		return Err("profile_list too short");
+	}
+	let mut i:usize = 2;
+	let mut ret:std::vec::Vec<String> = std::vec::Vec::<String>::new();
+	let mut profile_name:std::vec::Vec<u8> = std::vec::Vec::<u8>::new();
+	while i < profile_list.len(){
+		if profile_list[i] == 0 || profile_list[i] == 0xff{
+			let new_string = match String::from_utf8(profile_name.clone()){
+				Ok(s) => s,
+				Err(_) => {return Err("failed decoding profile name");},
+			};
+			ret.push(new_string);
+			profile_name.clear();
+		}else{
+			profile_name.push(profile_list[i]);
+		}
+		if profile_list[i] == 0xff{
+			return Ok(ret);
+		}
+		i = i + 1;
+	}
+	return Err("profile_list ended unexpectedly");
+}
+
+pub fn write_profile_list(profile_list:&std::vec::Vec<String>) -> std::vec::Vec<u8>{
+	let mut ret:std::vec::Vec<u8> = vec![0x05, 0x00];
+	for (i, string) in profile_list.iter().enumerate(){
+		for byte in string.clone().into_bytes(){
+			ret.push(byte);
+		}
+		if i != profile_list.len() - 1{
+			ret.push(0x00);
+		}
+	}
+	ret.append(&mut vec![0xff, 0xff, 0x58, 0x8d, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+	return ret;
+}

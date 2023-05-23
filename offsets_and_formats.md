@@ -19,8 +19,14 @@
 	- empty email/password digests are just 0:u32, used in offline saves
 - 0x1a-0x39: nickname
 
+### ProfileList.dat
+- starts with header 0x5d
+- each profile name starts with 0x00
+- has trailer 0xff 0xff 0x58 0x8d 0x00 0x00 0x00 0x00 0x00 0x00
+
 ### memory offsets
 - 0x0089a730: parsing and checking playersave against nickname, email, password
 	- 0x0089a79e: reading nickname, email, password hashes from decrypted save file buffer
 		- it is also possible to nop out checking of hashes so that any playersave can be used any commondt.sav
 - 0x00624880: hashing nickname, email, password
+

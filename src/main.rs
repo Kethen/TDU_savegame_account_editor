@@ -5,6 +5,7 @@ fn main() {
 	test_commondt_read();
 	test_commondt_write();
 	test_playersave_write();
+	test_profilelist_read_write();
 }
 
 fn test_commondt_write(){
@@ -55,4 +56,18 @@ fn test_commondt_read(){
 	print!("nickname: {}\n", login.nickname);
 	print!("email: {}\n", login.email);
 	print!("password: {}\n", login.password);
+}
+
+fn test_profilelist_read_write(){
+	let profile_list1 = std::fs::read("ProfileList.dat").unwrap();
+	let profile_list2 = std::fs::read("ProfileList.dat2").unwrap();
+
+	let profile_list1 = util::read_profile_list(&profile_list1).unwrap();
+	let profile_list2 = util::read_profile_list(&profile_list2).unwrap();
+
+	let profile_list1 = util::write_profile_list(&profile_list1);
+	let profile_list2 = util::write_profile_list(&profile_list2);
+
+	std::fs::write("ProfileList.dat.rewritten", &profile_list1);
+	std::fs::write("ProfileList.dat2.rewritten", &profile_list2);
 }

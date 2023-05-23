@@ -1,11 +1,13 @@
 [package]
-name = "tdu_savegame_account_changer"
+name = "tdu_savegame_account_editor"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+iced = "0.9"
+rfd = { version = "0.11.3", default-features = false, features = ["xdg-portal"]}
 
 [profile.dev]
 overflow-checks = false

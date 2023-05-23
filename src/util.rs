@@ -68,7 +68,7 @@ pub struct PlayerIdentifier{
 	pub password: String,
 }
 
-pub fn read_commondt(commondt:&std::vec::Vec<u8>) -> Result<PlayerIdentifier, &'static str>{
+pub fn read_commondt(commondt:&std::vec::Vec<u8>) -> Result<(PlayerIdentifier, bool), &'static str>{
 	if commondt.len() < 0x10f{
 		return Err("commondt is too small");
 	}
@@ -86,11 +86,17 @@ pub fn read_commondt(commondt:&std::vec::Vec<u8>) -> Result<PlayerIdentifier, &'
 		Err(_) => {return Err("cannot decode password from commondt");}
 	};
 
-	return Ok(PlayerIdentifier{
+	let online = if commondt[0x91] == 1{
+		true
+	}else{
+		false
+	};
+
+	return Ok((PlayerIdentifier{
 		nickname: nickname,
 		email: email,
 		password: password,
-	});
+	}, online));
 }
 
 pub fn patch_commondrt(commondt:&mut std::vec::Vec<u8>, player_identifier: &PlayerIdentifier, online:bool) -> Result<(), &'static str>{
@@ -216,6 +222,10 @@ pub fn read_profile_list(profile_list:&std::vec::Vec<u8>) -> Result<std::vec::Ve
 	let mut profile_name:std::vec::Vec<u8> = std::vec::Vec::<u8>::new();
 	while i < profile_list.len(){
 		if profile_list[i] == 0 || profile_list[i] == 0xff{
+			// eh, just eh, misunderstood the serialization originally
+			if profile_list[i] == 0{
+				profile_name.pop();
+			}
 			let new_string = match String::from_utf8(profile_name.clone()){
 				Ok(s) => s,
 				Err(_) => {return Err("failed decoding profile name");},
@@ -234,15 +244,17 @@ pub fn read_profile_list(profile_list:&std::vec::Vec<u8>) -> Result<std::vec::Ve
 }
 
 pub fn write_profile_list(profile_list:&std::vec::Vec<String>) -> std::vec::Vec<u8>{
-	let mut ret:std::vec::Vec<u8> = vec![0x05, 0x00];
+	let mut ret:std::vec::Vec<u8> = std::vec::Vec::<u8>::new();
 	for (i, string) in profile_list.iter().enumerate(){
-		for byte in string.clone().into_bytes(){
+		let bytes = string.clone().into_bytes();
+		let len = u16::try_from(bytes.len()).unwrap();
+		for byte in len.to_le_bytes(){
 			ret.push(byte);
 		}
-		if i != profile_list.len() - 1{
-			ret.push(0x00);
+		for byte in bytes{
+			ret.push(byte);
 		}
 	}
-	ret.append(&mut vec![0xff, 0xff, 0x58, 0x8d, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+	ret.append(&mut vec![0xff, 0xff, 0x96, 0x8b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
 	return ret;
 }

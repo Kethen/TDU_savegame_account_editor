@@ -20,10 +20,9 @@
 - 0x1a-0x39: nickname
 
 ### ProfileList.dat
-- starts with header 0x5d
-- each profile name starts with 0x00
-- has trailer 0xff 0xff 0x58 0x8d 0x00 0x00 0x00 0x00 0x00 0x00
-
+- each profile name starts with a u16_le length
+- has trailer 0xff 0xff 0x96 0x8b 0x00 0x00 0x00 0x00 0x00 0x00
+	- 0x96 0x8b is written when the first profile is active, 0xf7 0x0c when the second profile is active, no idea on how is it derived
 ### memory offsets
 - 0x0089a730: parsing and checking playersave against nickname, email, password
 	- 0x0089a79e: reading nickname, email, password hashes from decrypted save file buffer

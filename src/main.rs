@@ -98,6 +98,7 @@ struct AccountChanger {
 	state_color:StateColor,
 	commondt_cache:std::vec::Vec<u8>,
 	playersave_cache:std::vec::Vec<u8>,
+	bookmark_cache:std::vec::Vec<u8>,
 }
 
 #[derive(Debug, Clone)]
@@ -162,7 +163,7 @@ fn get_file_last_modified(path:&String) -> std::time::SystemTime{
 	}
 }
 
-fn fetch_commondt_and_playersave(path:&String, profile_name:&String) -> Result<(std::vec::Vec<u8>, std::vec::Vec<u8>), String>{
+fn fetch_commondt_and_playersave(path:&String, profile_name:&String) -> Result<(std::vec::Vec<u8>, std::vec::Vec<u8>, std::vec::Vec<u8>), String>{
 	if !std::path::Path::new(&path).exists(){
 		return Err(format!("{} does not exist", path));
 	}
@@ -223,7 +224,27 @@ fn fetch_commondt_and_playersave(path:&String, profile_name:&String) -> Result<(
 		std::vec::Vec::<u8>::new()
 	};
 
-	return Ok((commondt, playersave));
+	let bookmark_path = format!("{}/{}", profile_dir, "bookmark");
+	let mut bookmark = if std::path::Path::new(&bookmark_path).is_dir(){
+		let mut bookmark_tar_builder = tar::Builder::new(Vec::new());
+		match bookmark_tar_builder.append_dir_all("bookmark", bookmark_path){
+			Ok(_) => {},
+			Err(e) => {
+				return Err(format!("cannot read bookmark dir into memory, {}", e))
+			},
+		};
+		match bookmark_tar_builder.into_inner(){
+			Ok(tar) => tar,
+			Err(e) => {
+				return Err(format!("cannot read bookmark dir into memory, {}", e))
+			}
+		}
+	}else{
+		log(&format!("profile {} has no bookmark", profile_name));
+		std::vec::Vec::<u8>::new()
+	};
+
+	return Ok((commondt, playersave, bookmark));
 }
 
 fn import_playersave(path:&String) -> Result<std::vec::Vec<u8>, String>{
@@ -261,7 +282,8 @@ fn perform_patch(commondt:&std::vec::Vec<u8>,
 				profile_list:&std::vec::Vec<String>,
 				player_identifier:&util::PlayerIdentifier,
 				online:bool,
-				new_profile_name:&String) -> Result<(), String>{
+				new_profile_name:&String,
+				bookmark:&std::vec::Vec<u8>) -> Result<(), String>{
 	let mut commondt = commondt.clone();
 	match util::patch_commondt(&mut commondt, player_identifier, online){
 		Ok(_) => {},
@@ -308,7 +330,8 @@ fn perform_patch(commondt:&std::vec::Vec<u8>,
 		}
 	}
 
-	let playersave_path = format!("{}/{}/{}", base_dir, new_profile_name, "playersave");
+	let new_profile_path = format!("{}/{}", base_dir, new_profile_name);
+	let playersave_path = format!("{}/{}", new_profile_path, "playersave");
 	match std::fs::DirBuilder::new().recursive(true).create(&playersave_path){
 		Ok(_) => {},
 		Err(e) => {
@@ -341,11 +364,22 @@ fn perform_patch(commondt:&std::vec::Vec<u8>,
 
 	let new_profile_list = util::write_profile_list(&new_profile_list);
 	match std::fs::write(path, &new_profile_list){
-		Ok(_) => Ok(()),
+		Ok(_) => {},
 		Err(e) => {
-			Err(format!("failed writing ProfileList.dat, {}", e))
+			return Err(format!("failed writing ProfileList.dat, {}", e));
 		}
 	}
+
+	if bookmark.len() != 0{
+		match tar::Archive::new(std::io::Cursor::new(bookmark)).unpack(&new_profile_path){
+			Ok(_) => {},
+			Err(e) => {
+				return Err(format!("successfully written profile and ProfileList.dat, but failed to restore bookmarks, {}", e));
+			}
+		}
+	}
+
+	return Ok(());
 }
 
 impl Sandbox for AccountChanger{
@@ -369,15 +403,17 @@ impl Sandbox for AccountChanger{
 		let mut selected_profile_valid = false;
 		let mut commondt_cache = std::vec::Vec::<u8>::new();
 		let mut playersave_cache = std::vec::Vec::<u8>::new();
+		let mut bookmark_cache = std::vec::Vec::<u8>::new();
 
 		let (player_identifier, online) = if selected_profile.len() != 0{
 			match fetch_commondt_and_playersave(&path, &selected_profile){
-				Ok((commondt, playersave)) => {
+				Ok((commondt, playersave, bookmark)) => {
 					match util::read_commondt(&commondt){
 						Ok((pi, online)) => {
 							selected_profile_valid = true;
 							commondt_cache.append(&mut commondt.clone());
 							playersave_cache.append(&mut playersave.clone());
+							bookmark_cache.append(&mut bookmark.clone());
 							(pi, online)
 						},
 						Err(_) => (player_identifier, false),
@@ -406,6 +442,7 @@ impl Sandbox for AccountChanger{
 			state_color:StateColor::Default,
 			commondt_cache:commondt_cache,
 			playersave_cache:playersave_cache,
+			bookmark_cache:bookmark_cache,
 		}
 	}
 
@@ -437,8 +474,7 @@ impl Sandbox for AccountChanger{
 			Message::SelectProfile(n) => {
 				self.selected_profile = n.clone();
 				match fetch_commondt_and_playersave(&self.path, &self.selected_profile){
-					Ok(cp) => {
-						let (commondt, playersave) = cp;
+					Ok((commondt, playersave, bookmark)) => {
 						match util::read_commondt(&commondt){
 							Ok((pi, online)) => {
 								self.nickname = pi.nickname.clone();
@@ -448,6 +484,7 @@ impl Sandbox for AccountChanger{
 								self.commondt_cache = commondt;
 								self.online = online;
 								self.playersave_cache = playersave;
+								self.bookmark_cache = bookmark;
 							},
 							Err(e) => {
 								self.nickname = String::from("");
@@ -557,7 +594,8 @@ impl Sandbox for AccountChanger{
 						&self.profile_list,
 						&player_identifier,
 						self.online,
-						&new_profile_name){
+						&new_profile_name,
+						&self.bookmark_cache){
 					Ok(_) => {
 						self.state = format!("successfully modified {} and updated ProfileList.dat", self.selected_profile);
 						self.state_color = StateColor::Green;

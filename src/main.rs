@@ -233,13 +233,35 @@ fn import_playersave(path:&String) -> Result<std::vec::Vec<u8>, String>{
 	}
 }
 
+fn nickname_to_profile_name(nickname:&String) -> Result<String, String>{
+	let string_bytes = nickname.clone().into_bytes();
+	let mut i:usize = 0;
+	let mut new_string_bytes = std::vec::Vec::<u8>::new();
+	while i < string_bytes.len(){
+		if string_bytes[i] == b'\0'{
+			break;
+		}
+		if (string_bytes[i] >= b'a' && string_bytes[i] <= b'z') ||
+				(string_bytes[i] >= b'A' && string_bytes[i] <= b'Z') ||
+				(string_bytes[i] >= b'0' && string_bytes[i] <= b'9'){
+			new_string_bytes.push(string_bytes[i]);
+		}
+		i = i + 1;
+	}
+	match String::from_utf8(new_string_bytes){
+		Ok(s) => Ok(s),
+		Err(e) => Err(format!("cannot convert nickname to profile name, {}", e)),
+	}
+}
+
 fn perform_patch(commondt:&std::vec::Vec<u8>,
 				playersave:&std::vec::Vec<u8>,
 				path:&String,
 				profile_name:&String,
 				profile_list:&std::vec::Vec<String>,
 				player_identifier:&util::PlayerIdentifier,
-				online:bool) -> Result<(), String>{
+				online:bool,
+				new_profile_name:&String) -> Result<(), String>{
 	let mut commondt = commondt.clone();
 	match util::patch_commondt(&mut commondt, player_identifier, online){
 		Ok(_) => {},
@@ -286,7 +308,7 @@ fn perform_patch(commondt:&std::vec::Vec<u8>,
 		}
 	}
 
-	let playersave_path = format!("{}/{}/{}", base_dir, player_identifier.nickname.trim_end_matches('\0'), "playersave");
+	let playersave_path = format!("{}/{}/{}", base_dir, new_profile_name, "playersave");
 	match std::fs::DirBuilder::new().recursive(true).create(&playersave_path){
 		Ok(_) => {},
 		Err(e) => {
@@ -310,7 +332,7 @@ fn perform_patch(commondt:&std::vec::Vec<u8>,
 		}
 	}
 
-	let mut new_profile_list = vec![player_identifier.nickname.clone()];
+	let mut new_profile_list = vec![new_profile_name.clone()];
 	for item in profile_list{
 		if !(item == profile_name){
 			new_profile_list.push(item.clone());
@@ -452,8 +474,8 @@ impl Sandbox for AccountChanger{
 			},
 			Message::ChangeNickname(s) => {
 				self.nickname = s.clone();
-				if self.nickname.len() > 30{
-					self.nickname = self.nickname[0..30].to_string();
+				if self.nickname.len() > 20{
+					self.nickname = self.nickname[0..20].to_string();
 				}
 			},
 			Message::ChangeEmail(s) => {
@@ -486,9 +508,23 @@ impl Sandbox for AccountChanger{
 				}
 			},
 			Message::Apply => {
-				if self.nickname.trim_end_matches('\0').to_string() != self.selected_profile{
+				let new_profile_name = match nickname_to_profile_name(&self.nickname){
+					Ok(s) => s,
+					Err(e) => {
+						self.state = format!("nickname {} cannot be converted to profile name, {}", self.nickname, e);
+						self.state_color = StateColor::Red;
+						return;
+					}
+				};
+				if new_profile_name.len() == 0{
+					self.state = format!("nickname cannot be made of only special characters");
+					self.state_color = StateColor::Red;
+					return;
+				}
+
+				if new_profile_name != self.selected_profile{
 					for item in &self.profile_list{
-						if item == &self.nickname.trim_end_matches('\0').to_string(){
+						if item == &new_profile_name{
 							self.state = format!("Profile name {} is already in-use", item);
 							self.state_color = StateColor::Red;
 							return;
@@ -520,7 +556,8 @@ impl Sandbox for AccountChanger{
 						&self.selected_profile,
 						&self.profile_list,
 						&player_identifier,
-						self.online){
+						self.online,
+						&new_profile_name){
 					Ok(_) => {
 						self.state = format!("successfully modified {} and updated ProfileList.dat", self.selected_profile);
 						self.state_color = StateColor::Green;

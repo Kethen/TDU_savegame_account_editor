@@ -68,20 +68,33 @@ pub struct PlayerIdentifier{
 	pub password: String,
 }
 
+fn filter_null_in_byte_string_vec(in_byte_string:&std::vec::Vec<u8>) -> std::vec::Vec<u8>{
+	let mut i:usize = 0;
+	let mut ret = std::vec::Vec::<u8>::new();
+	while i < in_byte_string.len(){
+		if in_byte_string[i] == 0{
+			break;
+		}
+		ret.push(in_byte_string[i]);
+		i = i + 1;
+	}
+	return ret;
+}
+
 pub fn read_commondt(commondt:&std::vec::Vec<u8>) -> Result<(PlayerIdentifier, bool), &'static str>{
 	if commondt.len() < 0x10f{
 		return Err("commondt is too small");
 	}
 
-	let nickname = match String::from_utf8(commondt[0x98..0xb8].to_vec()){
+	let nickname = match String::from_utf8(filter_null_in_byte_string_vec(&commondt[0x98..0xb8].to_vec())){
 		Ok(s) => s,
 		Err(_) => {return Err("cannot decode nickname from commondt");}
 	};
-	let email = match String::from_utf8(commondt[0xba..0xee].to_vec()){
+	let email = match String::from_utf8(filter_null_in_byte_string_vec(&commondt[0xba..0xee].to_vec())){
 		Ok(s) => s,
 		Err(_) => {return Err("cannot decode email from commondt");}
 	};
-	let password = match String::from_utf8(commondt[0xf0..0x10f].to_vec()){
+	let password = match String::from_utf8(filter_null_in_byte_string_vec(&commondt[0xf0..0x10f].to_vec())){
 		Ok(s) => s,
 		Err(_) => {return Err("cannot decode password from commondt");}
 	};
@@ -269,6 +282,6 @@ pub fn write_profile_list(profile_list:&std::vec::Vec<String>) -> std::vec::Vec<
 			ret.push(byte);
 		}
 	}
-	ret.append(&mut vec![0xff, 0xff, 0x96, 0x8b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
+	ret.append(&mut vec![0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]);
 	return ret;
 }

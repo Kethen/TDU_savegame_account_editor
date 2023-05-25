@@ -685,6 +685,12 @@ impl Sandbox for AccountChanger{
 							self.password.len() != 0
 						) ||
 							!self.online
+						) &&
+						((
+							self.import_playersave &&
+							self.import_playersave_path.len() != 0
+						) ||
+							!self.import_playersave
 						){
 					button("Apply").on_press(Message::Apply)
 				}else{

@@ -234,6 +234,28 @@ fn fetch_commondt_and_playersave(path:&String, profile_name:&String) -> Result<(
 				return Err(format!("cannot read bookmark dir into memory, {}", e))
 			},
 		};
+
+		// XXX by default it outputs IGE, but with andraste vfs it becomes ige
+		// not really a problem on the windows port but is a problem on the linux port
+		let ige_path = format!("{}/{}", profile_dir, "IGE");
+		let ige_path_alt = format!("{}/{}", profile_dir, "ige");
+		if std::path::Path::new(&ige_path).is_dir(){
+			match bookmark_tar_builder.append_dir_all("ige", ige_path){
+				Ok(_) => {},
+				Err(e) => {
+					return Err(format!("cannot read bookmark dir into memory, {}", e))
+				},
+			};
+		}
+		if std::path::Path::new(&ige_path_alt).is_dir(){
+			match bookmark_tar_builder.append_dir_all("ige", ige_path_alt){
+				Ok(_) => {},
+				Err(e) => {
+					return Err(format!("cannot read bookmark dir into memory, {}", e))
+				},
+			};
+		}
+
 		match bookmark_tar_builder.into_inner(){
 			Ok(tar) => tar,
 			Err(e) => {

@@ -14,3 +14,5 @@ tdudec on rust is ported from the source release of tdudec at http://aluigi.alte
 .exe for windows (win32 and win64), without for linux (x86_64 glibc).
 
 Alternatively the project can be built using cargo like other rust projects, it should build in MacOS as well.
+
+Alternative andraste plugin that allows loading any playersave on any profile: https://github.com/Kethen/tdu_andraste_playersave_validation_skip

@@ -7,6 +7,24 @@ use rfd::FileDialog;
 use iced::{Element, Alignment, Task, Color, Size};
 use iced::widget::{button, checkbox, pick_list, text, text_input, column, row};
 
+// rfd 0.15's xdg-portal backend goes through zbus 5, which requires being
+// called from the context of a Tokio 1.x runtime. iced's Default executor is
+// async-global-executor, so we have to spin up a one-shot Tokio runtime for
+// the duration of the file dialog call.
+fn pick_file_with_filter(filter_name:&str, ext:&[&str]) -> Option<std::path::PathBuf>{
+	let rt = tokio::runtime::Builder::new_current_thread()
+		.enable_all()
+		.build()
+		.ok()?;
+	rt.block_on(async {
+		rfd::AsyncFileDialog::new()
+			.add_filter(filter_name, ext)
+			.pick_file()
+			.await
+			.map(|h| h.path().to_path_buf())
+	})
+}
+
 const config_file:&str = "tdu_savegame_account_editor.conf";
 const log_file:&str = "tdu_savegame_account_editor.log";
 
@@ -475,9 +493,7 @@ impl AccountChanger {
 			Message::IgnoreString(_) => {},
 			Message::IgnoreToggle(_) => {},
 			Message::SelectPath => {
-				match FileDialog::new()
-					.add_filter("ProfileList.dat", &["dat"])
-					.pick_file(){
+				match pick_file_with_filter("ProfileList.dat", &["dat"]){
 						Some(p) => {
 							self.path = format!("{}", p.display());
 							self.profile_list = fetch_and_filter_profile_list(&self.path);
@@ -554,8 +570,7 @@ impl AccountChanger {
 				self.import_playersave = b;
 			},
 			Message::SelectImportPath => {
-				match FileDialog::new()
-					.pick_file(){
+				match pick_file_with_filter("playersave", &[""]){
 						Some(p) => {
 							self.import_playersave_path = format!("{}", p.display());
 						},

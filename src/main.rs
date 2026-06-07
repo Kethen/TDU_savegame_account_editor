@@ -4,8 +4,8 @@ mod tdudec;
 
 use rfd::FileDialog;
 
-use iced::{Sandbox, Element, Alignment, Settings, Color};
-use iced::widget::{button, container, checkbox, pick_list, scrollable, text, text_input, column, row};
+use iced::{Element, Alignment, Task, Color, Size};
+use iced::widget::{button, checkbox, pick_list, text, text_input, column, row};
 
 const config_file:&str = "tdu_savegame_account_editor.conf";
 const log_file:&str = "tdu_savegame_account_editor.log";
@@ -61,7 +61,10 @@ fn guess_path() -> String {
 		Err(e) => {log(&e);},
 	}
 
-	match std::env::var("USERPROFILE") {
+	// USERPROFILE is Windows-only; fall back to HOME for Linux/macOS.
+	let home = std::env::var("USERPROFILE")
+		.or_else(|_| std::env::var("HOME"));
+	match home {
 		Ok(p) => {
 			let ret = format!("{}/Documents/Test Drive Unlimited/savegame/ProfileList.dat", p);
 			let path = std::path::Path::new(&ret);
@@ -70,7 +73,7 @@ fn guess_path() -> String {
 				return ret;
 			}
 		}
-		Err(e) => {log(&format!("cannot read env USERPROFILE, {}", e));},
+		Err(e) => {log(&format!("cannot read env USERPROFILE or HOME, {}", e));},
 	}
 
 	return String::from("");
@@ -405,10 +408,8 @@ fn perform_patch(commondt:&std::vec::Vec<u8>,
 	return Ok(());
 }
 
-impl Sandbox for AccountChanger{
-	type Message = Message;
-
-	fn new() -> Self{
+impl AccountChanger {
+	fn new() -> (Self, Task<Message>){
 		let path = guess_path();
 		let mut profile_list = fetch_and_filter_profile_list(&path);
 		let selected_profile = if profile_list.len() != 0{
@@ -448,7 +449,7 @@ impl Sandbox for AccountChanger{
 			(player_identifier, false)
 		};
 
-		Self{
+		(Self{
 			path:path,
 			selected_profile:selected_profile,
 			selected_profile_valid:selected_profile_valid,
@@ -466,14 +467,10 @@ impl Sandbox for AccountChanger{
 			commondt_cache:commondt_cache,
 			playersave_cache:playersave_cache,
 			bookmark_cache:bookmark_cache,
-		}
+		}, Task::none())
 	}
 
-	fn title(&self) -> String{
-		String::from("Test Drive Unlimited savegame account editor")
-	}
-
-	fn update(&mut self, message:Message){
+	fn update(&mut self, message:Message) -> Task<Message>{
 		match message{
 			Message::IgnoreString(_) => {},
 			Message::IgnoreToggle(_) => {},
@@ -486,7 +483,7 @@ impl Sandbox for AccountChanger{
 							self.profile_list = fetch_and_filter_profile_list(&self.path);
 							if self.profile_list.len() != 0{
 								save_last_used_path(&self.path);
-								self.update(Message::SelectProfile(self.profile_list[0].clone()));
+								return self.update(Message::SelectProfile(self.profile_list[0].clone()));
 							}
 						},
 						None => {
@@ -573,13 +570,13 @@ impl Sandbox for AccountChanger{
 					Err(e) => {
 						self.state = format!("nickname {} cannot be converted to profile name, {}", self.nickname, e);
 						self.state_color = StateColor::Red;
-						return;
+						return Task::none();
 					}
 				};
 				if new_profile_name.len() == 0{
 					self.state = format!("nickname cannot be made of only special characters");
 					self.state_color = StateColor::Red;
-					return;
+					return Task::none();
 				}
 
 				if new_profile_name != self.selected_profile{
@@ -587,7 +584,7 @@ impl Sandbox for AccountChanger{
 						if item == &new_profile_name{
 							self.state = format!("Profile name {} is already in-use", item);
 							self.state_color = StateColor::Red;
-							return;
+							return Task::none();
 						}
 					}
 				}
@@ -605,7 +602,7 @@ impl Sandbox for AccountChanger{
 						Err(e) => {
 							self.state = e.clone();
 							self.state_color = StateColor::Red;
-							return;
+							return Task::none();
 						}
 					}
 				}
@@ -632,23 +629,24 @@ impl Sandbox for AccountChanger{
 				}
 				self.profile_list = fetch_and_filter_profile_list(&self.path);
 				if self.profile_list.len() != 0{
-					self.update(Message::SelectProfile(self.profile_list[0].clone()));
+					return self.update(Message::SelectProfile(self.profile_list[0].clone()));
 				}
 			}
 		};
+		Task::none()
 	}
 
-	fn view(&self) -> Element<Message>{
+	fn view(&self) -> Element<'_, Message>{
 		column![
 			row![
 				text("ProfileList.dat path:"),
 				text_input("", &self.path).on_input(Message::IgnoreString),
 				button("...").on_press(Message::SelectPath),
-			].align_items(Alignment::Center),
+			].align_y(Alignment::Center),
 			row![
 				text("Profile to edit:"),
 				pick_list(self.profile_list.clone(), Some(self.selected_profile.clone()), Message::SelectProfile),
-			].align_items(Alignment::Center),
+			].align_y(Alignment::Center),
 			row![
 				text("Nickname:"),
 				if self.selected_profile_valid{
@@ -656,7 +654,7 @@ impl Sandbox for AccountChanger{
 				}else{
 					text_input("", "")
 				},
-			].align_items(Alignment::Center),
+			].align_y(Alignment::Center),
 			row![
 				text("Email:"),
 				if self.selected_profile_valid && self.online{
@@ -664,7 +662,7 @@ impl Sandbox for AccountChanger{
 				}else{
 					text_input("", "")
 				},
-			].align_items(Alignment::Center),
+			].align_y(Alignment::Center),
 			row![
 				text("Password:"),
 				if self.selected_profile_valid && self.online{
@@ -672,21 +670,21 @@ impl Sandbox for AccountChanger{
 				}else{
 					text_input("", "")
 				},
-			].align_items(Alignment::Center),
+			].align_y(Alignment::Center),
 			row![
 				text("Online:"),
 				if self.selected_profile_valid{
-					checkbox("", self.online, Message::ToggleOnline)
+					checkbox("", self.online).on_toggle(Message::ToggleOnline)
 				}else{
-					checkbox("", false, Message::IgnoreToggle)
+					checkbox("", false).on_toggle(Message::IgnoreToggle)
 				},
-			].align_items(Alignment::Center),
+			].align_y(Alignment::Center),
 			row![
 				text("Import another playersave to this profile:"),
 				if self.selected_profile_valid{
-					checkbox("", self.import_playersave, Message::ToggleImport)
+					checkbox("", self.import_playersave).on_toggle(Message::ToggleImport)
 				}else{
-					checkbox("", false, Message::IgnoreToggle)
+					checkbox("", false).on_toggle(Message::IgnoreToggle)
 				},
 				if self.selected_profile_valid && self.import_playersave{
 					text_input("", &self.import_playersave_path).on_input(Message::IgnoreString)
@@ -698,7 +696,7 @@ impl Sandbox for AccountChanger{
 				}else{
 					button("...")
 				}
-			].align_items(Alignment::Center),
+			].align_y(Alignment::Center),
 			row![
 				if self.selected_profile_valid &&
 						self.nickname.len() != 0 &&
@@ -719,7 +717,7 @@ impl Sandbox for AccountChanger{
 				}else{
 					button("Apply")
 				}						
-			].align_items(Alignment::Center),
+			].align_y(Alignment::Center),
 			row![
 				text("Last event: "),
 				match self.state_color{
@@ -727,25 +725,26 @@ impl Sandbox for AccountChanger{
 						text(&self.state)
 					},
 					StateColor::Green => {
-						text(&self.state).style(Color::from([0.0, 0.5, 0.0]))
+						text(&self.state).color(Color::from_rgb(0.0, 0.5, 0.0))
 					},
 					StateColor::Red => {
-						text(&self.state).style(Color::from([0.5, 0.0, 0.0]))
+						text(&self.state).color(Color::from_rgb(0.5, 0.0, 0.0))
 					},
 				}
-			].align_items(Alignment::Center),
+			].align_y(Alignment::Center),
 		]
-		.align_items(Alignment::Start)
+		.align_x(Alignment::Start)
 		.padding(10)
 		.into()
 	}
 }
 
 fn main() {
-	let mut settings = Settings::default();
-	settings.window.resizable = false;
-	settings.window.size = (700, 290);
-	AccountChanger::run(settings);
+	iced::application("Test Drive Unlimited savegame account editor", AccountChanger::update, AccountChanger::view)
+		.window_size(Size::new(700.0, 290.0))
+		.resizable(false)
+		.run_with(AccountChanger::new)
+		.unwrap();
 }
 
 fn test() {

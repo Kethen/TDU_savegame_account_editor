@@ -15,4 +15,14 @@ tdudec on rust is ported from the source release of tdudec at http://aluigi.alte
 
 Alternatively the project can be built using cargo like other rust projects, it should build in MacOS as well.
 
+#### Linux + Wayland note
+
+The Linux build is currently pinned to `iced 0.9` / `winit 0.27`, whose `wayland-client` bindings only understand `wl_surface` up to v3. Compositors newer than roughly late 2022 (KDE Plasma 6 / KWin 6, recent wlroots-based compositors) advertise `wl_surface` v4 events (`preferred_buffer_scale`, `preferred_buffer_transform`) and the client panics with `interface 'wl_surface' has no event 2`.
+
+Workaround until `iced` is upgraded: run under XWayland:
+
+```sh
+WAYLAND_DISPLAY= ./tdu_savegame_account_editor
+```
+
 Alternative andraste plugin that allows loading any playersave on any profile: https://github.com/Kethen/tdu_andraste_playersave_validation_skip
